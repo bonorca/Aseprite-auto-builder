@@ -3,7 +3,7 @@
 Auto-compile the latest [Aseprite](https://github.com/aseprite/aseprite) for Windows using GitHub Actions.
 It checks daily for new Aseprite releases and compiles automatically.
 
-[中文说明 / Aseprite 自动构建器](README_CN.md)
+[中文](README_CN.md)
 
 ## Usage
 
