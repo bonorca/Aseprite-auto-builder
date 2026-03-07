@@ -7,10 +7,16 @@ It checks daily for new Aseprite releases and compiles automatically.
 
 1. **Fork** this repo
 2. Go to **Actions** tab
-3. Select **"Build and release Aseprite"** → **Run workflow**
-4. Wait ~20 min, then download the zip from **Releases**
+3. Enable Workflow
+4. Select **"Build and release Aseprite"** → **Run workflow**
+5. Wait ~20 min, then download the zip from **Releases**
 
 After that, the workflow checks daily for new Aseprite versions and builds automatically.
+
+<img src="https://github.com/user-attachments/assets/e4b7340a-8204-4ce3-9f60-e718a6b48ad2" width="600">
+<img src="https://github.com/user-attachments/assets/2765b8ca-4782-47ee-878b-c77d897979a5" width="600">
+
+
 
 - Note: Please set your fork to private to respect Aseprite's EULA, which does not allow distributing compiled binaries.
 
