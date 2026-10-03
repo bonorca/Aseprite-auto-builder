@@ -20,7 +20,7 @@ After that, the workflow checks daily for new Aseprite versions and builds autom
 
 
 
-- Note: Please set your fork to private or delete the release after use to respect Aseprite's EULA, which does not allow distributing compiled binaries.
+- Note: Please set your fork to **private** or **delete** the release after use to respect Aseprite's EULA, which does not allow distributing compiled binaries.
 
 ## Credits
 
