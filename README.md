@@ -1,7 +1,8 @@
 # Aseprite Auto Builder
 
 [![Build](https://github.com/bonorca/Aseprite-auto-builder/actions/workflows/build-aseprite.yml/badge.svg)](https://github.com/bonorca/Aseprite-auto-builder/actions/workflows/build-aseprite.yml)
-[![Verified](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/bonorca/Aseprite-auto-builder/main/.github/badges/verified.json)](https://github.com/bonorca/Aseprite-auto-builder/actions/workflows/build-aseprite.yml)
+[![Verified with Aseprite](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbonorca%2FAseprite-auto-builder%2Fmain%2F.github%2Fbadges%2Fverified.json&query=%24.version&label=verified%20with%20Aseprite&color=brightgreen)](https://github.com/bonorca/Aseprite-auto-builder/actions/workflows/build-aseprite.yml)
+[![Last verified](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fbonorca%2FAseprite-auto-builder%2Fmain%2F.github%2Fbadges%2Fverified.json&query=%24.date&label=last%20verified&color=blue)](https://github.com/bonorca/Aseprite-auto-builder/actions/workflows/build-aseprite.yml)
 
 Auto-compile the latest [Aseprite](https://github.com/aseprite/aseprite) for Windows using GitHub Actions.
 It checks daily for new Aseprite releases and compiles automatically.
