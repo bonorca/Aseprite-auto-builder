@@ -63,12 +63,11 @@ jobs:
           TAG: ${{ steps.aseprite-link.outputs.release-tag }}
         run: |
           if [ "$GITHUB_REPOSITORY" = "$UPSTREAM_REPO" ]; then
-            # Verify mode. Badge message looks like "v1.3.16 · 2026-11-23".
-            LAST=$(jq -r '.message // ""' "$BADGE_FILE" 2>/dev/null || true)
-            LAST_TAG=$(echo "$LAST" | awk '{print $1}')
-            LAST_DATE=$(echo "$LAST" | awk '{print $NF}')
-            AGE_DAYS=$(( ( $(date -u +%s) - $(date -u -d "$LAST_DATE" +%s 2>/dev/null || echo 0) ) / 86400 ))
-            echo "Last verified: ${LAST:-never} (${AGE_DAYS} days ago)"
+            # Verify mode. Badge file looks like {"version":"v1.3.16","date":"2026-11-23"}.
+            LAST_TAG=$(jq -r '.version // ""' "$BADGE_FILE" 2>/dev/null || true)
+            LAST_DATE=$(jq -r '.date // ""' "$BADGE_FILE" 2>/dev/null || true)
+            AGE_DAYS=$(( ( $(date -u +%s) - $(date -u -d "${LAST_DATE:-1970-01-01}" +%s 2>/dev/null || echo 0) ) / 86400 ))
+            echo "Last verified: ${LAST_TAG:-never} on ${LAST_DATE:-never} (${AGE_DAYS} days ago)"
 
             if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
               echo "Triggered by $GITHUB_EVENT_NAME, will verify."
@@ -172,8 +171,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$(dirname "$BADGE_FILE")"
-          printf '{"schemaVersion":1,"label":"verified with Aseprite","message":"%s · %s","color":"brightgreen"}\n' \
-            "$TAG" "$(date -u +%F)" > "$BADGE_FILE"
+          # Read by the shields.io dynamic JSON badges in the README.
+          printf '{"version":"%s","date":"%s"}\n' "$TAG" "$(date -u +%F)" > "$BADGE_FILE"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$BADGE_FILE"
