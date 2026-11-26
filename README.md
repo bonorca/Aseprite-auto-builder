@@ -1,5 +1,8 @@
 # Aseprite Auto Builder
 
+[![Build](https://github.com/bonorca/Aseprite-auto-builder/actions/workflows/build-aseprite.yml/badge.svg)](https://github.com/bonorca/Aseprite-auto-builder/actions/workflows/build-aseprite.yml)
+[![Verified](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/bonorca/Aseprite-auto-builder/main/.github/badges/verified.json)](https://github.com/bonorca/Aseprite-auto-builder/actions/workflows/build-aseprite.yml)
+
 Auto-compile the latest [Aseprite](https://github.com/aseprite/aseprite) for Windows using GitHub Actions.
 It checks daily for new Aseprite releases and compiles automatically.
 
@@ -20,7 +23,8 @@ After that, the workflow checks daily for new Aseprite versions and builds autom
 
 
 
-- Note: Please set your fork to **private** or **delete** the release after use to respect Aseprite's EULA, which does not allow distributing compiled binaries.
+- Note: Forks are always public, so please **delete the release** after downloading to respect Aseprite's EULA, which does not allow distributing compiled binaries. Deleting it won't trigger a rebuild: GitHub keeps the tag, and the workflow only builds again when a new Aseprite version comes out.
+- The badges above show whether the build still works and which Aseprite version it was last verified with. If your build breaks after a fix has landed here, click **Sync fork** on your fork to get it.
 
 ## Credits
 

@@ -1,5 +1,12 @@
 name: Build and release Aseprite
 
+# How this workflow behaves depends on where it runs:
+#   - In a fork: builds each new Aseprite version once and publishes it as a release.
+#     Whether a version was already built is decided by its git tag, which stays behind
+#     when the release is deleted, so deleting the release does not trigger a rebuild.
+#   - In the original repo (UPSTREAM_REPO): only verifies that the build still works.
+#     Nothing is uploaded; the result is written to a README badge.
+
 on:
   push:
     branches:
@@ -10,9 +17,18 @@ on:
     - cron: '0 8 * * *' # Check once daily at UTC 8:00
   workflow_dispatch:       # Keep manual trigger
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+
 env:
   BUILD_TYPE: Release
   SKIA_VERSION: m124-08a5439a6b
+  UPSTREAM_REPO: bonorca/Aseprite-auto-builder
+  BADGE_FILE: .github/badges/verified.json
+  REVERIFY_DAYS: 7         # Upstream only: rebuild the same version this often to catch breakage
 
 jobs:
   check-new-release:
@@ -24,58 +40,76 @@ jobs:
     steps:
       - name: Fetch latest Aseprite release tag
         id: aseprite-link
-        run: |
-          TAG=$(curl -s https://api.github.com/repos/aseprite/aseprite/releases/latest | jq -r '.tag_name')
-          echo "Latest Aseprite release: $TAG"
-          echo "release-tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Check if already built
-        id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ steps.aseprite-link.outputs.release-tag }}"
-          echo "Latest upstream tag: $TAG"
-
-          # Check if this repo already has a release with Windows zip for this tag
-          if gh release view "$TAG" --repo "${{ github.repository }}" --json assets -q '.assets[].name' 2>/dev/null | grep -q "Windows"; then
-            echo "Already built $TAG for Windows, skipping."
-            echo "should-build=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "New version $TAG detected, will build."
-            echo "should-build=true" >> "$GITHUB_OUTPUT"
+          TAG=$(gh api repos/aseprite/aseprite/releases/latest -q '.tag_name')
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not read the latest Aseprite release tag."
+            exit 1
           fi
+          echo "Latest Aseprite release: $TAG"
+          echo "release-tag=$TAG" >> "$GITHUB_OUTPUT"
 
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
+      - uses: actions/checkout@v4
+        if: github.repository == env.UPSTREAM_REPO
+        with:
+          sparse-checkout: .github/badges
+
+      - name: Check if a build is needed
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.aseprite-link.outputs.release-tag }}
+        run: |
+          if [ "$GITHUB_REPOSITORY" = "$UPSTREAM_REPO" ]; then
+            # Verify mode. Badge message looks like "v1.3.16 · 2026-11-23".
+            LAST=$(jq -r '.message // ""' "$BADGE_FILE" 2>/dev/null || true)
+            LAST_TAG=$(echo "$LAST" | awk '{print $1}')
+            LAST_DATE=$(echo "$LAST" | awk '{print $NF}')
+            AGE_DAYS=$(( ( $(date -u +%s) - $(date -u -d "$LAST_DATE" +%s 2>/dev/null || echo 0) ) / 86400 ))
+            echo "Last verified: ${LAST:-never} (${AGE_DAYS} days ago)"
+
+            if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
+              echo "Triggered by $GITHUB_EVENT_NAME, will verify."
+              SHOULD_BUILD=true
+            elif [ "$LAST_TAG" != "$TAG" ]; then
+              echo "$TAG has not been verified yet, will verify."
+              SHOULD_BUILD=true
+            elif [ "$AGE_DAYS" -ge "$REVERIFY_DAYS" ]; then
+              echo "Last verification is older than $REVERIFY_DAYS days, will verify again."
+              SHOULD_BUILD=true
+            else
+              echo "$TAG was verified recently, skipping."
+              SHOULD_BUILD=false
+            fi
+          else
+            # Release mode. The tag survives when the user deletes the release.
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
+              echo "Tag $TAG already exists, $TAG was built before. Skipping."
+              SHOULD_BUILD=false
+            else
+              echo "New version $TAG detected, will build."
+              SHOULD_BUILD=true
+            fi
+          fi
+          echo "should-build=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
+
+  build-aseprite:
+    name: Build Aseprite (Windows)
     needs: check-new-release
     if: needs.check-new-release.outputs.should-build == 'true'
     permissions:
       contents: write
-    outputs:
-      release-tag: ${{ needs.check-new-release.outputs.release-tag }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ needs.check-new-release.outputs.release-tag }}
-          body: Aseprite-${{ needs.check-new-release.outputs.release-tag }}
-          skipIfReleaseExists: true
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-  build-aseprite:
-    name: Build Aseprite (Windows)
-    needs: create-release
-    permissions:
-      contents: write
     runs-on: windows-latest
+    env:
+      TAG: ${{ needs.check-new-release.outputs.release-tag }}
     steps:
       - uses: actions/checkout@v4
       - name: Clone Aseprite
         shell: bash
         run: |
-          git clone --recurse-submodules -j8 https://github.com/aseprite/aseprite --branch ${{ needs.create-release.outputs.release-tag }}
+          git clone --recurse-submodules -j8 https://github.com/aseprite/aseprite --branch "$TAG"
       - name: Install Skia
         working-directory: aseprite
         shell: bash
@@ -105,16 +139,48 @@ jobs:
         working-directory: aseprite/build/bin
         shell: bash
         run: find . -mindepth 1 ! \( -name 'aseprite.exe' -o -name 'data' -prune \) -exec rm -rf {} +
+      - name: Smoke test
+        working-directory: aseprite/build/bin
+        shell: bash
+        timeout-minutes: 2
+        run: ./aseprite.exe -b --version
+
+      # ---- Forks: publish a release ----
       - name: Make portable zip
+        if: github.repository != env.UPSTREAM_REPO
         working-directory: aseprite/build/bin
         run: echo '# This file is here so Aseprite behaves as a portable program' > aseprite.ini
       - name: Create release zip
+        if: github.repository != env.UPSTREAM_REPO
         working-directory: aseprite/build/bin
-        run: 7z -tzip a Aseprite-${{ needs.create-release.outputs.release-tag }}-Windows.zip *
-      - name: Upload release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: aseprite/build/bin/Aseprite-${{ needs.create-release.outputs.release-tag }}-Windows.zip
-          asset_name: Aseprite-${{ needs.create-release.outputs.release-tag }}-Windows.zip
-          tag: ${{ needs.create-release.outputs.release-tag }}
+        run: 7z -tzip a Aseprite-${{ env.TAG }}-Windows.zip *
+      - name: Publish release
+        if: github.repository != env.UPSTREAM_REPO
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Created only after a successful build, so the tag existing means the build succeeded.
+        run: |
+          gh release create "$TAG" "aseprite/build/bin/Aseprite-$TAG-Windows.zip" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" \
+            --notes "Aseprite-$TAG"
+
+      # ---- Upstream: record the verified version in the README badge ----
+      - name: Update verified badge
+        if: github.repository == env.UPSTREAM_REPO
+        shell: bash
+        run: |
+          mkdir -p "$(dirname "$BADGE_FILE")"
+          printf '{"schemaVersion":1,"label":"verified with Aseprite","message":"%s · %s","color":"brightgreen"}\n' \
+            "$TAG" "$(date -u +%F)" > "$BADGE_FILE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$BADGE_FILE"
+          if git diff --cached --quiet; then
+            echo "Badge unchanged."
+            exit 0
+          fi
+          git commit -m "Verified build with Aseprite $TAG"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
